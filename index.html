@@ -12,7 +12,7 @@
     #loading-overlay { font-size:20px; z-index:1; display:flex; flex-direction:column; justify-content:center; align-items:center; }
     #icon { max-width:300px; border-radius:10px; margin-bottom:20px; }
     #progress-bar { border-radius:5px; width:90%; max-width:250px; height:20px; background:#181818; padding:5px; }
-    #progress-bar-fill { border-radius:3px; width:0%; height:100%; background:#9747FF; }
+    #progress-bar-fill { border-radius:3px; width:0%; height:100%; background:#9747FF; transition:width .2s linear; }
   </style>
 </head>
 <body>
@@ -23,64 +23,26 @@
     <div id="progress-bar"><div id="progress-bar-fill"></div></div>
   </div>
 
-  <script>
-    // helpers
-    function loadScript(src, {defer=false, async=false, cross=null, sri=null} = {}) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;
-        if (defer) s.defer = true;
-        if (async) s.async = true;
-        if (cross) s.crossOrigin = cross;
-        if (sri) s.integrity = sri;
-        s.onload = () => resolve(src);
-        s.onerror = () => reject(new Error('Failed to load ' + src));
-        document.head.appendChild(s);
-      });
-    }
-
-    async function ensureHowler() {
-      // try local
-      try {
-        await loadScript('add/howler.js', {defer:true});
-      } catch (_) {
-        // fallback to CDN
-        try {
-          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js', {
-            defer:true,
-            cross:'anonymous',
-            sri:'sha512-3M8G8M1QENt2eVd0tQ6M7e4g0y6FTm8aSCACLk7jQmVb+0nQ+7c0ycxZJr4Q4H3iQ3j8iD6j/3p0h5R4Q9Yx8w=='
-          });
-        } catch (e) {
-          // final safety shim so Unity won't explode
-          if (typeof window.Howl === 'undefined') {
-            console.warn('Howler failed to load. Installing no-op shim.');
-            window.Howler = { volume: function(){}, ctx: null };
-            window.Howl = function(){ return { play:function(){}, stop:function(){}, pause:function(){}, on:function(){}, once:function(){}, off:function(){} }; };
-          }
-        }
-      }
-      // spin until defined or shim present
-      const started = Date.now();
-      while (typeof window.Howl === 'undefined' && Date.now() - started < 3000) {
-        await new Promise(r => setTimeout(r, 25));
-      }
-    }
-  </script>
+  <!-- Your local libs -->
+  <script src="add/howler.js"></script>
+  <script src="add/mo.js"></script>
+  <script src="playgama-bridge.js"></script>
 
   <script>
+    // elements
     const canvas = document.getElementById('canvas');
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBarFill = document.getElementById('progress-bar-fill');
-    const bannerContainer = document.getElementById('banner-container');
 
-    let unityInstance = null;
+    // globals Unity expects
+    window.unityInstance = null;
+    window.sounds = {};           // <-- required by your Unity JS hooks
+    window.sound = null;          // optional single sound handle some code uses
+    window.isSound = 1;
+
+    // progress bar
     let progressBarFillingInterval = null;
     let progressBarCompleteFillingStarted = false;
-
-    function sendMessageToUnity(name, value) {
-      if (unityInstance) unityInstance.SendMessage('PlaygamaBridge', name, value || '');
-    }
 
     function onUnityLoadingProgressChanged(progress) {
       if (progress >= 1 && progressBarFillingInterval !== null) {
@@ -112,119 +74,98 @@
       }, 100);
     }
 
+    // focus canvas on first input
     window.addEventListener('pointerdown', () => {
       window.focus();
       canvas.focus();
     });
 
-    // minimal Yandex bridge mock (deduped keys)
-    window.bridge = {
-      platform:{ id:'', language:'en', payload:'', tld:'' },
-      device:{ type:'desktop' },
-      player:{ isAuthorizationSupported:false, isAuthorized:false, id:'', name:'', photos:[] },
-      game:{ visibilityState:'visible', on:()=>{} },
-      storage:{ defaultType:'local', isSupported:()=>true, isAvailable:()=>true },
-      advertisement:{ interstitialState:'', isBannerSupported:false, minimumDelayBetweenInterstitial:0, on:()=>{} },
-      social:{}, leaderboard:{}, payments:{}, remoteConfig:{ isSupported:false }, achievements:{},
-      initialize: () => Promise.resolve()
-    };
+    // send message helper
+    function sendMessageToUnity(name, value) {
+      if (window.unityInstance && typeof window.unityInstance.SendMessage === 'function') {
+        window.unityInstance.SendMessage('PlaygamaBridge', name, value || '');
+      }
+    }
 
-    // mock functions Unity expects
-    const mockBool = v => v ? 'true' : 'false';
-    window.getPlatformId = () => '';
-    window.getPlatformLanguage = () => 'en';
-    window.getPlatformPayload = () => '';
-    window.getPlatformTld = () => '';
-    window.sendMessageToPlatform = () => {};
-    window.getServerTime = () => sendMessageToUnity('OnGetServerTimeCompleted', Date.now().toString());
-    window.getDeviceType = () => 'desktop';
-    window.getIsPlayerAuthorizationSupported = () => mockBool(false);
-    window.getIsPlayerAuthorized = () => mockBool(false);
-    window.getPlayerId = () => '';
-    window.getPlayerName = () => '';
-    window.getPlayerPhotos = () => '[]';
-    window.authorizePlayer = () => sendMessageToUnity('OnAuthorizeCompleted', mockBool(false));
-    window.getVisibilityState = () => 'visible';
-    window.getStorageDefaultType = () => 'local';
-    window.getIsStorageSupported = () => mockBool(true);
-    window.getIsStorageAvailable = () => mockBool(true);
-    window.getStorageData = (key) => sendMessageToUnity('OnGetStorageDataSuccess', `${key}{bridge_data_separator}`);
-    window.setStorageData = (key) => sendMessageToUnity('OnSetStorageDataSuccess', key);
-    window.deleteStorageData = (key) => sendMessageToUnity('OnDeleteStorageDataSuccess', key);
-    window.getInterstitialState = () => '';
-    window.getIsBannerSupported = () => mockBool(false);
-    window.getMinimumDelayBetweenInterstitial = () => '0';
-    window.setMinimumDelayBetweenInterstitial = () => {};
-    window.showBanner = () => {};
-    window.hideBanner = () => {};
-    window.showInterstitial = () => {};
-    window.showRewarded = () => {};
-    window.checkAdBlock = () => sendMessageToUnity('OnCheckAdBlockCompleted', mockBool(false));
-    window.getIsShareSupported = () => mockBool(false);
-    window.getIsInviteFriendsSupported = () => mockBool(false);
-    window.getIsJoinCommunitySupported = () => mockBool(false);
-    window.getIsCreatePostSupported = () => mockBool(false);
-    window.getIsAddToHomeScreenSupported = () => mockBool(false);
-    window.getIsAddToFavoritesSupported = () => mockBool(false);
-    window.getIsRateSupported = () => mockBool(false);
-    window.getIsExternalLinksAllowed = () => mockBool(true);
-    window.share = () => sendMessageToUnity('OnShareCompleted', mockBool(false));
-    window.inviteFriends = () => sendMessageToUnity('OnInviteFriendsCompleted', mockBool(false));
-    window.joinCommunity = () => sendMessageToUnity('OnJoinCommunityCompleted', mockBool(false));
-    window.createPost = () => sendMessageToUnity('OnCreatePostCompleted', mockBool(false));
-    window.addToHomeScreen = () => sendMessageToUnity('OnAddToHomeScreenCompleted', mockBool(false));
-    window.addToFavorites = () => sendMessageToUnity('OnAddToFavoritesCompleted', mockBool(false));
-    window.rate = () => sendMessageToUnity('OnRateCompleted', mockBool(false));
-    window.getIsLeaderboardSupported = () => mockBool(false);
-    window.getIsLeaderboardNativePopupSupported = () => mockBool(false);
-    window.getIsLeaderboardSetScoreSupported = () => mockBool(false);
-    window.getIsLeaderboardGetScoreSupported = () => mockBool(false);
-    window.getIsLeaderboardGetEntriesSupported = () => mockBool(false);
-    window.leaderboardSetScore = () => sendMessageToUnity('OnLeaderboardSetScoreCompleted', mockBool(false));
-    window.leaderboardGetScore = () => sendMessageToUnity('OnLeaderboardGetScoreCompleted', '');
-    window.leaderboardGetEntries = () => sendMessageToUnity('OnLeaderboardGetEntriesCompletedSuccess', '[]');
-    window.leaderboardShowNativePopup = () => sendMessageToUnity('OnLeaderboardShowNativePopupCompleted', mockBool(false));
-    window.getIsPaymentsSupported = () => mockBool(false);
-    window.getIsCatalogSupported = () => mockBool(false);
-    window.getIsPurchaseListSupported = () => mockBool(false);
-    window.getIsPurchaseConsumingSupported = () => mockBool(false);
-    window.paymentsPurchase = () => sendMessageToUnity('OnPaymentsPurchaseFailed', '');
-    window.paymentsConsumePurchase = () => sendMessageToUnity('OnPaymentsConsumePurchaseCompleted', mockBool(false));
-    window.paymentsGetCatalog = () => sendMessageToUnity('OnPaymentsGetCatalogCompletedSuccess', '[]');
-    window.paymentsGetPurchases = () => sendMessageToUnity('OnPaymentsGetPurchasesCompletedSuccess', '[]');
-    window.getIsRemoteConfigSupported = () => mockBool(false);
-    window.remoteConfigGet = () => sendMessageToUnity('OnRemoteConfigGetFailed', '');
-    window.getIsAchievementsSupported = () => mockBool(false);
-    window.getIsGetAchievementsListSupported = () => mockBool(false);
-    window.getIsAchievementsNativePopupSupported = () => mockBool(false);
-    window.achievementsUnlock = () => sendMessageToUnity('OnAchievementsUnlockCompleted', mockBool(false));
-    window.achievementsShowNativePopup = () => sendMessageToUnity('OnAchievementsShowNativePopupCompleted', mockBool(false));
-    window.achievementsGetList = () => sendMessageToUnity('OnAchievementsGetListCompletedSuccess', '[]');
+    // Howler helpers
+    function ensureHowlerReady() {
+      return new Promise((resolve) => {
+        const start = Date.now();
+        (function waitForHowl() {
+          if (typeof window.Howl === 'function') return resolve(true);
+          if (Date.now() - start > 3000) return resolve(false);
+          setTimeout(waitForHowl, 25);
+        })();
+      });
+    }
 
-    // sound helpers (will run after Howler is ready)
     function initMutedLoop() {
       try {
-        const s = new Howl({ src:['silent.mp3'], loop:true, volume:0 });
+        const s = new Howl({ src: ['silent.mp3'], loop: true, volume: 0 });
         s.play();
         return s;
       } catch (e) {
-        console.warn('Howler not available or failed to init:', e);
+        console.warn('Howler init failed:', e);
         return null;
       }
     }
-    function HowlerSoundOff(){ if (window.Howler && Howler.volume) { Howler.volume(0); } }
-    function HowlerSoundOn(){ if (window.Howler && Howler.volume) { Howler.volume(1); } }
+
+    // exposed volume toggles
+    function HowlerSoundOff(){ if (window.Howler && Howler.volume) { window.isSound = 0; Howler.volume(0); } }
+    function HowlerSoundOn(){  if (window.Howler && Howler.volume) { window.isSound = 1; Howler.volume(1); } }
     window.HowlerSoundOff = HowlerSoundOff;
-    window.HowlerSoundOn = HowlerSoundOn;
+    window.HowlerSoundOn  = HowlerSoundOn;
+
+    // simple registry used by Unity side
+    // these are safe no-ops if Howler is missing
+    window.LoadSound = function(name, src, loopStr, volStr){
+      try {
+        const loop = loopStr === true || loopStr === 'true';
+        const volume = Math.max(0, Math.min(1, parseFloat(volStr || 1)));
+        const howl = new Howl({ src: [src], loop, volume });
+        window.sounds[name] = howl;
+      } catch(e) {
+        console.warn('LoadSound failed', name, src, e);
+      }
+    };
+
+    window.PlaySound = function(name){
+      try {
+        const h = window.sounds[name];
+        if (h) { h.play(); window.sound = h; }
+      } catch(e) {
+        console.warn('PlaySound failed', name, e);
+      }
+    };
+
+    window.StopSound = function(name){
+      try {
+        const h = window.sounds[name];
+        if (h) h.stop();
+      } catch(e) {
+        console.warn('StopSound failed', name, e);
+      }
+    };
+
+    window.SetSoundVolume = function(name, volStr){
+      try {
+        const h = window.sounds[name];
+        if (h) h.volume(Math.max(0, Math.min(1, parseFloat(volStr))));
+      } catch(e) {
+        console.warn('SetSoundVolume failed', name, e);
+      }
+    };
+
     window.openUrlInNewTab = function(url){ window.open(url, '_blank'); };
+    window.getServerTime = () => sendMessageToUnity('OnGetServerTimeCompleted', Date.now().toString());
 
-    // bootstrap
-    (async function start() {
-      await ensureHowler();
-      // start silent loop to unlock audio on mobile
-      initMutedLoop();
+    // boot
+    (async function boot() {
+      const howlerOk = await ensureHowlerReady();
+      if (howlerOk) initMutedLoop();
+      else console.error('Howler not loaded. Check add/howler.js path.');
 
-      // now load Unity loader
+      // load Unity loader
       try {
         await new Promise((resolve, reject) => {
           const s = document.createElement('script');
@@ -239,13 +180,13 @@
         return;
       }
 
-      // create Unity instance only after Howler is ready or shim installed
       if (typeof createUnityInstance !== 'function') {
         console.error('createUnityInstance is not available.');
         alert('Oyun yüklenemedi. Lütfen sayfayı yenileyin.');
         return;
       }
 
+      // start Unity
       try {
         const instance = await createUnityInstance(
           canvas,
