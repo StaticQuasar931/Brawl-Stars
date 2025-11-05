@@ -5,21 +5,21 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 
   <!-- Primary SEO -->
-  <title>Brawl Stars – Play Free | StaticQuasar931 Unblocked Games</title>
+  <title>Brawl Stars | Play Free | StaticQuasar931 Unblocked Games</title>
   <meta name="description" content="Play Brawl Stars free on StaticQuasar931 Unblocked Games. Fast WebGL build, instant loading, working audio, and smooth gameplay."/>
   <meta name="keywords" content="Brawl Stars, unblocked games, webgl, play online, free game, shooter, action, StaticQuasar931"/>
   <link rel="canonical" href="https://staticquasar931.github.io/Brawl-Stars/"/>
 
   <!-- Open Graph -->
   <meta property="og:type" content="website"/>
-  <meta property="og:title" content="Brawl Stars – Play Free | StaticQuasar931 Unblocked Games"/>
+  <meta property="og:title" content="Brawl Stars | Play Free | StaticQuasar931 Unblocked Games"/>
   <meta property="og:description" content="Play Brawl Stars free on StaticQuasar931 Unblocked Games."/>
   <meta property="og:url" content="https://staticquasar931.github.io/Brawl-Stars/"/>
   <meta property="og:image" content="https://cdn.jsdelivr.net/gh/StaticQuasar931/Images@main/StaticQuasar931_Banner_Media_Google_Sites_Neon_ChatGPT_Image.png"/>
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image"/>
-  <meta name="twitter:title" content="Brawl Stars – Play Free | StaticQuasar931 Unblocked Games"/>
+  <meta name="twitter:title" content="Brawl Stars | Play Free | StaticQuasar931 Unblocked Games"/>
   <meta name="twitter:description" content="Play Brawl Stars free on StaticQuasar931 Unblocked Games."/>
   <meta name="twitter:image" content="https://cdn.jsdelivr.net/gh/StaticQuasar931/Images@main/StaticQuasar931_Banner_Media_Google_Sites_Neon_ChatGPT_Image.png"/>
 
@@ -69,10 +69,13 @@
       padding:16px;
     }
     #loading-title {
-      margin-bottom:10px; font-weight:600; letter-spacing:.3px;
+      margin-bottom:12px; font-weight:800; letter-spacing:.2px;
       font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size:36px; line-height:1.15;
     }
-    #icon { max-width:300px; border-radius:10px; margin:8px 0 16px 0; }
+    #loading-title a { color:#fff; text-decoration:none; border-bottom:2px solid rgba(151,71,255,.9); padding-bottom:2px; }
+    #loading-title a:hover { opacity:.9; }
+    #icon { max-width:300px; border-radius:10px; margin:10px 0 16px 0; }
     #promo-link { display:inline-block; margin:10px 0 18px 0; }
     #promo-link img { max-width:720px; width:90vw; height:auto; border-radius:8px; }
 
@@ -99,22 +102,12 @@
       border-radius:8px; cursor:pointer; text-decoration:none;
     }
     #static-menu a:hover, #static-menu button:hover { background:rgba(151,71,255,.4); }
+    /* hide the enable sound button */
+    #btn-sound-on { display:none; }
 
     /* Animations container bottom right, 70px higher than normal */
     #animations-container {
       position:absolute; right:20px; bottom:70px; z-index:4; pointer-events:none;
-    }
-
-    /* Tap to start prompt for audio gesture */
-    #tap-to-start {
-      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      color:#fff; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background:rgba(0,0,0,.35); cursor:pointer; user-select:none;
-      opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:5;
-    }
-    #tap-to-start.visible { opacity:1; pointer-events:auto; }
-    #tap-to-start .bubble {
-      background:#111; padding:14px 18px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.4);
     }
 
     /* Visual SEO: semantic heading off-canvas for screen readers and bots */
@@ -135,7 +128,11 @@
 
   <!-- Loading overlay -->
   <div id="loading-overlay" class="fullscreen" role="status" aria-live="polite">
-    <div id="loading-title">StaticQuasar931 Unblocked Games presents</div>
+    <div id="loading-title">
+      <a href="https://sites.google.com/view/staticquasar931/gm3z" target="_blank" rel="noopener">
+        StaticQuasar931 Unblocked Games presents
+      </a>
+    </div>
     <img id="icon" src="./icon.png" alt="Brawl Stars icon"/>
     <a id="promo-link" href="https://sites.google.com/view/staticquasar931/gm3z" target="_blank" rel="noopener">
       <img src="https://cdn.jsdelivr.net/gh/StaticQuasar931/Images@main/StaticQuasar931_Banner_Media_Google_Sites_Neon_ChatGPT_Image.png"
@@ -146,18 +143,15 @@
 
   <!-- Static menu in top left -->
   <nav id="static-menu" aria-label="Game menu">
-    <button type="button" onclick="HowlerSoundOn()">Sound On</button>
+    <button id="btn-sound-on" type="button" onclick="HowlerSoundOn()">Sound On</button>
     <button type="button" onclick="HowlerSoundOff()">Sound Off</button>
     <a href="https://sites.google.com/view/staticquasar931/gm3z" target="_blank" rel="noopener">More Games</a>
   </nav>
 
   <!-- Animations container bottom right, 70px higher -->
   <div id="animations-container" aria-hidden="true">
-    <!-- Drop decorative DOM animations here if desired -->
+    <!-- decorative animations go here if you add any -->
   </div>
-
-  <!-- Tap to start prompt for audio -->
-  <div id="tap-to-start"><div class="bubble">Tap or click to enable audio</div></div>
 
   <!-- Local libraries -->
   <script src="add/howler.js"></script>
@@ -168,7 +162,6 @@
     const canvas = document.getElementById('canvas');
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBarFill = document.getElementById('progress-bar-fill');
-    const tapToStart = document.getElementById('tap-to-start');
 
     // Globals used by Unity glue
     window.unityInstance = null;
@@ -320,15 +313,7 @@
       try {
         primedLoop = new Howl({ src:['silent.mp3'], loop:true, volume:0 });
         primedLoop.play();
-      } catch (e) { console.warn('Howler prime failed:', e); }
-    }
-
-    function showTapIfNeeded() {
-      try {
-        if (Howler && Howler.ctx && Howler.ctx.state !== 'running') {
-          tapToStart.classList.add('visible');
-        }
-      } catch {}
+      } catch (e) { /* best effort */ }
     }
 
     function resumeAudio() {
@@ -339,17 +324,8 @@
       } catch {}
     }
 
-    function resumeAudioOnGesture() {
-      resumeAudio();
-      tapToStart.classList.remove('visible');
-      window.removeEventListener('pointerdown', resumeAudioOnGesture, { once:true });
-      window.removeEventListener('keydown', resumeAudioOnGesture, { once:true });
-      window.removeEventListener('touchstart', resumeAudioOnGesture, { once:true });
-    }
-    window.addEventListener('pointerdown', resumeAudioOnGesture, { once:true });
-    window.addEventListener('keydown', resumeAudioOnGesture, { once:true });
-    window.addEventListener('touchstart', resumeAudioOnGesture, { once:true });
-    document.addEventListener('visibilitychange', () => {
+    // no overlay, just try to resume on common events
+    window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') resumeAudio();
     });
 
@@ -364,36 +340,29 @@
         const volume = Math.max(0, Math.min(1, parseFloat(volStr || 1)));
         const howl = new Howl({ src: [src], loop, volume });
         window.sounds[name] = howl;
-      } catch(e) { console.warn('LoadSound failed', name, src, e); }
+      } catch(e) { /* no-op */ }
     };
     window.PlaySound = function(name){
       try { const h = window.sounds[name]; if (h) { h.play(); window.sound = h; } }
-      catch(e) { console.warn('PlaySound failed', name, e); }
+      catch(e) {}
     };
     window.StopSound = function(name){
       try { const h = window.sounds[name]; if (h) h.stop(); }
-      catch(e) { console.warn('StopSound failed', name, e); }
+      catch(e) {}
     };
     window.SetSoundVolume = function(name, volStr){
       try { const h = window.sounds[name]; if (h) h.volume(Math.max(0, Math.min(1, parseFloat(volStr)))); }
-      catch(e) { console.warn('SetSoundVolume failed', name, e); }
+      catch(e) {}
     };
 
     window.openUrlInNewTab = function(url){ window.open(url, '_blank'); };
-  </script>
 
-  <!-- Your bridge file if needed by your project -->
-  <script src="playgama-bridge.js"></script>
-
-  <script>
     // Try to start audio automatically where allowed
     (async function autoStartAudio() {
       const ok = await ensureHowlerReady();
       if (ok) {
         primeAudio();
-        // Try resume without gesture. Some browsers will allow it when page is visible.
         setTimeout(resumeAudio, 150);
-        showTapIfNeeded();
       }
     })();
 
