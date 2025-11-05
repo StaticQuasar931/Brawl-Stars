@@ -40,14 +40,8 @@
     "genre": "Action",
     "applicationCategory": "Game",
     "operatingSystem": "Web",
-    "author": {
-      "@type": "Organization",
-      "name": "StaticQuasar931 Unblocked Games"
-    },
-    "publisher": {
-      "@type": "Organization",
-      "name": "StaticQuasar931 Unblocked Games"
-    }
+    "author": { "@type": "Organization", "name": "StaticQuasar931 Unblocked Games" },
+    "publisher": { "@type": "Organization", "name": "StaticQuasar931 Unblocked Games" }
   }
   </script>
 
@@ -62,7 +56,7 @@
     .fullscreen { width:100%; height:100%; position:absolute; top:0; left:0; }
     #canvas { background:#242424; display:block; }
 
-    /* Loading overlay with visual SEO text and linked banner */
+    /* Loading overlay with bigger, bolder, linked title and banner */
     #loading-overlay {
       font-size:20px; z-index:3; display:flex; flex-direction:column;
       justify-content:center; align-items:center; color:#fff; text-align:center;
@@ -96,14 +90,12 @@
       padding:10px 12px;
       box-shadow:0 6px 16px rgba(0,0,0,.35);
     }
-    #static-menu a, #static-menu button {
+    #static-menu a {
       display:block; margin:6px 0; padding:8px 10px; font-size:14px;
       color:#fff; background:rgba(151,71,255,.25); border:1px solid rgba(151,71,255,.55);
-      border-radius:8px; cursor:pointer; text-decoration:none;
+      border-radius:8px; text-decoration:none;
     }
-    #static-menu a:hover, #static-menu button:hover { background:rgba(151,71,255,.4); }
-    /* hide the enable sound button */
-    #btn-sound-on { display:none; }
+    #static-menu a:hover { background:rgba(151,71,255,.4); }
 
     /* Animations container bottom right, 70px higher than normal */
     #animations-container {
@@ -141,17 +133,13 @@
     <div id="progress-bar" aria-label="Loading progress"><div id="progress-bar-fill"></div></div>
   </div>
 
-  <!-- Static menu in top left -->
+  <!-- Static menu in top left (sound buttons removed) -->
   <nav id="static-menu" aria-label="Game menu">
-    <button id="btn-sound-on" type="button" onclick="HowlerSoundOn()">Sound On</button>
-    <button type="button" onclick="HowlerSoundOff()">Sound Off</button>
     <a href="https://sites.google.com/view/staticquasar931/gm3z" target="_blank" rel="noopener">More Games</a>
   </nav>
 
   <!-- Animations container bottom right, 70px higher -->
-  <div id="animations-container" aria-hidden="true">
-    <!-- decorative animations go here if you add any -->
-  </div>
+  <div id="animations-container" aria-hidden="true"></div>
 
   <!-- Local libraries -->
   <script src="add/howler.js"></script>
@@ -324,38 +312,10 @@
       } catch {}
     }
 
-    // no overlay, just try to resume on common events
-    window.addEventListener('visibilitychange', () => {
+    // try to resume on visibility
+    document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') resumeAudio();
     });
-
-    function HowlerSoundOff(){ if (window.Howler && Howler.volume) { window.isSound = 0; Howler.volume(0); } }
-    function HowlerSoundOn(){  if (window.Howler && Howler.volume) { window.isSound = 1; Howler.volume(1); } }
-    window.HowlerSoundOff = HowlerSoundOff;
-    window.HowlerSoundOn  = HowlerSoundOn;
-
-    window.LoadSound = function(name, src, loopStr, volStr){
-      try {
-        const loop = loopStr === true || loopStr === 'true';
-        const volume = Math.max(0, Math.min(1, parseFloat(volStr || 1)));
-        const howl = new Howl({ src: [src], loop, volume });
-        window.sounds[name] = howl;
-      } catch(e) { /* no-op */ }
-    };
-    window.PlaySound = function(name){
-      try { const h = window.sounds[name]; if (h) { h.play(); window.sound = h; } }
-      catch(e) {}
-    };
-    window.StopSound = function(name){
-      try { const h = window.sounds[name]; if (h) h.stop(); }
-      catch(e) {}
-    };
-    window.SetSoundVolume = function(name, volStr){
-      try { const h = window.sounds[name]; if (h) h.volume(Math.max(0, Math.min(1, parseFloat(volStr)))); }
-      catch(e) {}
-    };
-
-    window.openUrlInNewTab = function(url){ window.open(url, '_blank'); };
 
     // Try to start audio automatically where allowed
     (async function autoStartAudio() {
