@@ -1,78 +1,74 @@
 <!DOCTYPE html>
 <html lang="en-us">
 <head>
-<meta charset="utf-8"/>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-<title>Clicker</title>
-<style>
-    html, body {
-        width: 100%;
-        height: 100%;
-        padding: 0px;
-        margin: 0px;
-    }
-    .fullscreen {
-        background: #242424;
-        width: 100%;
-        height: 100%;
-        position: absolute;
-        top: 0px;
-        left: 0px;
-    }
-    #banner-container {
-        position: absolute;
-        bottom: 0px;
-        width: 100%;
-        height: 90px;
-        display: none !important; /* Reklam alanı tamamen kapalı */
-    }
-    #loading-overlay {
-        font-size: 20px;
-        z-index: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-    #icon {
-        max-width: 300px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-    }
-    #progress-bar {
-        border-radius: 5px;
-        width: 90%;
-        max-width: 250px;
-        height: 20px;
-        background: #181818;
-        padding: 5px;
-    }
-    #progress-bar-fill {
-        border-radius: 3px;
-        width: 0%;
-        height: 100%;
-        background: #9747FF;
-    }
-</style>
+  <meta charset="utf-8"/>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes"/>
+  <title>Clicker</title>
+  <style>
+    html, body { width:100%; height:100%; padding:0; margin:0; }
+    .fullscreen { background:#242424; width:100%; height:100%; position:absolute; top:0; left:0; }
+    #banner-container { position:absolute; bottom:0; width:100%; height:90px; display:none !important; }
+    #loading-overlay { font-size:20px; z-index:1; display:flex; flex-direction:column; justify-content:center; align-items:center; }
+    #icon { max-width:300px; border-radius:10px; margin-bottom:20px; }
+    #progress-bar { border-radius:5px; width:90%; max-width:250px; height:20px; background:#181818; padding:5px; }
+    #progress-bar-fill { border-radius:3px; width:0%; height:100%; background:#9747FF; }
+  </style>
 </head>
 <body>
-<canvas id="canvas" class="fullscreen"></canvas>
-<div id="banner-container"></div>
-<div id="loading-overlay" class="fullscreen">
-    <img id="icon" src="./icon.png"/>
+  <canvas id="canvas" class="fullscreen"></canvas>
+  <div id="banner-container"></div>
+  <div id="loading-overlay" class="fullscreen">
+    <img id="icon" src="./icon.png" alt="icon"/>
     <div id="progress-bar"><div id="progress-bar-fill"></div></div>
-</div>
+  </div>
 
-<script src="add/howler.js"></script>
-<script>
-    // Mobil viewport ayarı
-    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        let meta = document.createElement('meta');
-        meta.name = 'viewport';
-        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
-        document.head.appendChild(meta);
+  <script>
+    // helpers
+    function loadScript(src, {defer=false, async=false, cross=null, sri=null} = {}) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        if (defer) s.defer = true;
+        if (async) s.async = true;
+        if (cross) s.crossOrigin = cross;
+        if (sri) s.integrity = sri;
+        s.onload = () => resolve(src);
+        s.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(s);
+      });
     }
 
+    async function ensureHowler() {
+      // try local
+      try {
+        await loadScript('add/howler.js', {defer:true});
+      } catch (_) {
+        // fallback to CDN
+        try {
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js', {
+            defer:true,
+            cross:'anonymous',
+            sri:'sha512-3M8G8M1QENt2eVd0tQ6M7e4g0y6FTm8aSCACLk7jQmVb+0nQ+7c0ycxZJr4Q4H3iQ3j8iD6j/3p0h5R4Q9Yx8w=='
+          });
+        } catch (e) {
+          // final safety shim so Unity won't explode
+          if (typeof window.Howl === 'undefined') {
+            console.warn('Howler failed to load. Installing no-op shim.');
+            window.Howler = { volume: function(){}, ctx: null };
+            window.Howl = function(){ return { play:function(){}, stop:function(){}, pause:function(){}, on:function(){}, once:function(){}, off:function(){} }; };
+          }
+        }
+      }
+      // spin until defined or shim present
+      const started = Date.now();
+      while (typeof window.Howl === 'undefined' && Date.now() - started < 3000) {
+        await new Promise(r => setTimeout(r, 25));
+      }
+    }
+  </script>
+
+  <script>
     const canvas = document.getElementById('canvas');
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBarFill = document.getElementById('progress-bar-fill');
@@ -83,222 +79,195 @@
     let progressBarCompleteFillingStarted = false;
 
     function sendMessageToUnity(name, value) {
-        if (unityInstance !== null) {
-            unityInstance.SendMessage('PlaygamaBridge', name, value || '');
-        }
+      if (unityInstance) unityInstance.SendMessage('PlaygamaBridge', name, value || '');
     }
 
     function onUnityLoadingProgressChanged(progress) {
-        if (progress >= 1 && progressBarFillingInterval !== null) {
-            clearInterval(progressBarFillingInterval);
-            progressBarFillingInterval = null;
-            return;
-        }
-
-        if (progressBarCompleteFillingStarted) return;
-
-        if (progress >= 0.9) {
-            progressBarCompleteFillingStarted = true;
-            completeProgressBarFilling();
-            return;
-        }
-
-        progressBarFill.style.width = `${progress * 100}%`;
+      if (progress >= 1 && progressBarFillingInterval !== null) {
+        clearInterval(progressBarFillingInterval);
+        progressBarFillingInterval = null;
+        return;
+      }
+      if (progressBarCompleteFillingStarted) return;
+      if (progress >= 0.9) {
+        progressBarCompleteFillingStarted = true;
+        completeProgressBarFilling();
+        return;
+      }
+      progressBarFill.style.width = (progress * 100) + '%';
     }
 
     function completeProgressBarFilling() {
-        if (progressBarFillingInterval !== null) return;
-
-        let currentPercent = 90;
-        progressBarFill.style.width = `${currentPercent}%`;
-        progressBarFillingInterval = setInterval(() => {
-            currentPercent++;
-            if (currentPercent > 100) currentPercent = 100;
-            progressBarFill.style.width = `${currentPercent}%`;
-            if (currentPercent >= 100) {
-                clearInterval(progressBarFillingInterval);
-                progressBarFillingInterval = null;
-            }
-        }, 100);
+      if (progressBarFillingInterval !== null) return;
+      let currentPercent = 90;
+      progressBarFill.style.width = currentPercent + '%';
+      progressBarFillingInterval = setInterval(() => {
+        currentPercent++;
+        if (currentPercent > 100) currentPercent = 100;
+        progressBarFill.style.width = currentPercent + '%';
+        if (currentPercent >= 100) {
+          clearInterval(progressBarFillingInterval);
+          progressBarFillingInterval = null;
+        }
+      }, 100);
     }
 
     window.addEventListener('pointerdown', () => {
-        window.focus();
-        canvas.focus();
+      window.focus();
+      canvas.focus();
     });
 
-    // === YANDEX SDK YERİNE BOŞ MOCK OBJESİ ===
+    // minimal Yandex bridge mock (deduped keys)
     window.bridge = {
-        platform: { id: '', language: 'en', payload: '', tld: '' },
-        device: { type: 'desktop' },
-        player: { isAuthorizationSupported: false, isAuthorized: false, id: '', name: '', photos: [] },
-        game: { visibilityState: 'visible' },
-        storage: { defaultType: 'local', isSupported: () => true, isAvailable: () => true },
-        advertisement: { interstitialState: '', isBannerSupported: false, minimumDelayBetweenInterstitial: 0 },
-        social: {},
-        leaderboard: {},
-        payments: {},
-        remoteConfig: { isSupported: false },
-        achievements: {},
-
-        // Boş initialize → hemen resolve
-        initialize: () => Promise.resolve(),
-
-        // Tüm event'ler boş
-        advertisement: { on: () => {} },
-        game: { on: () => {} }
+      platform:{ id:'', language:'en', payload:'', tld:'' },
+      device:{ type:'desktop' },
+      player:{ isAuthorizationSupported:false, isAuthorized:false, id:'', name:'', photos:[] },
+      game:{ visibilityState:'visible', on:()=>{} },
+      storage:{ defaultType:'local', isSupported:()=>true, isAvailable:()=>true },
+      advertisement:{ interstitialState:'', isBannerSupported:false, minimumDelayBetweenInterstitial:0, on:()=>{} },
+      social:{}, leaderboard:{}, payments:{}, remoteConfig:{ isSupported:false }, achievements:{},
+      initialize: () => Promise.resolve()
     };
 
-    // === TÜM BRIDGE FONKSİYONLARI BOŞ DÖNÜYOR ===
-    const mockPromise = (success = true, data = '') => 
-        success ? Promise.resolve(data) : Promise.reject();
-
-    // Platform
+    // mock functions Unity expects
+    const mockBool = v => v ? 'true' : 'false';
     window.getPlatformId = () => '';
     window.getPlatformLanguage = () => 'en';
     window.getPlatformPayload = () => '';
     window.getPlatformTld = () => '';
     window.sendMessageToPlatform = () => {};
     window.getServerTime = () => sendMessageToUnity('OnGetServerTimeCompleted', Date.now().toString());
-
-    // Device
     window.getDeviceType = () => 'desktop';
-
-    // Player
-    window.getIsPlayerAuthorizationSupported = () => 'false';
-    window.getIsPlayerAuthorized = () => 'false';
+    window.getIsPlayerAuthorizationSupported = () => mockBool(false);
+    window.getIsPlayerAuthorized = () => mockBool(false);
     window.getPlayerId = () => '';
     window.getPlayerName = () => '';
     window.getPlayerPhotos = () => '[]';
-    window.authorizePlayer = () => sendMessageToUnity('OnAuthorizeCompleted', 'false');
-
-    // Game
+    window.authorizePlayer = () => sendMessageToUnity('OnAuthorizeCompleted', mockBool(false));
     window.getVisibilityState = () => 'visible';
-
-    // Storage
     window.getStorageDefaultType = () => 'local';
-    window.getIsStorageSupported = () => 'true';
-    window.getIsStorageAvailable = () => 'true';
+    window.getIsStorageSupported = () => mockBool(true);
+    window.getIsStorageAvailable = () => mockBool(true);
     window.getStorageData = (key) => sendMessageToUnity('OnGetStorageDataSuccess', `${key}{bridge_data_separator}`);
     window.setStorageData = (key) => sendMessageToUnity('OnSetStorageDataSuccess', key);
     window.deleteStorageData = (key) => sendMessageToUnity('OnDeleteStorageDataSuccess', key);
-
-    // Advertisement
     window.getInterstitialState = () => '';
-    window.getIsBannerSupported = () => 'false';
+    window.getIsBannerSupported = () => mockBool(false);
     window.getMinimumDelayBetweenInterstitial = () => '0';
     window.setMinimumDelayBetweenInterstitial = () => {};
     window.showBanner = () => {};
     window.hideBanner = () => {};
     window.showInterstitial = () => {};
     window.showRewarded = () => {};
-    window.checkAdBlock = () => sendMessageToUnity('OnCheckAdBlockCompleted', 'false');
-
-    // Social
-    window.getIsShareSupported = () => 'false';
-    window.getIsInviteFriendsSupported = () => 'false';
-    window.getIsJoinCommunitySupported = () => 'false';
-    window.getIsCreatePostSupported = () => 'false';
-    window.getIsAddToHomeScreenSupported = () => 'false';
-    window.getIsAddToFavoritesSupported = () => 'false';
-    window.getIsRateSupported = () => 'false';
-    window.getIsExternalLinksAllowed = () => 'true';
-    window.share = () => sendMessageToUnity('OnShareCompleted', 'false');
-    window.inviteFriends = () => sendMessageToUnity('OnInviteFriendsCompleted', 'false');
-    window.joinCommunity = () => sendMessageToUnity('OnJoinCommunityCompleted', 'false');
-    window.createPost = () => sendMessageToUnity('OnCreatePostCompleted', 'false');
-    window.addToHomeScreen = () => sendMessageToUnity('OnAddToHomeScreenCompleted', 'false');
-    window.addToFavorites = () => sendMessageToUnity('OnAddToFavoritesCompleted', 'false');
-    window.rate = () => sendMessageToUnity('OnRateCompleted', 'false');
-
-    // Leaderboard
-    window.getIsLeaderboardSupported = () => 'false';
-    window.getIsLeaderboardNativePopupSupported = () => 'false';
-    window.getIsLeaderboardSetScoreSupported = () => 'false';
-    window.getIsLeaderboardGetScoreSupported = () => 'false';
-    window.getIsLeaderboardGetEntriesSupported = () => 'false';
-    window.leaderboardSetScore = () => sendMessageToUnity('OnLeaderboardSetScoreCompleted', 'false');
+    window.checkAdBlock = () => sendMessageToUnity('OnCheckAdBlockCompleted', mockBool(false));
+    window.getIsShareSupported = () => mockBool(false);
+    window.getIsInviteFriendsSupported = () => mockBool(false);
+    window.getIsJoinCommunitySupported = () => mockBool(false);
+    window.getIsCreatePostSupported = () => mockBool(false);
+    window.getIsAddToHomeScreenSupported = () => mockBool(false);
+    window.getIsAddToFavoritesSupported = () => mockBool(false);
+    window.getIsRateSupported = () => mockBool(false);
+    window.getIsExternalLinksAllowed = () => mockBool(true);
+    window.share = () => sendMessageToUnity('OnShareCompleted', mockBool(false));
+    window.inviteFriends = () => sendMessageToUnity('OnInviteFriendsCompleted', mockBool(false));
+    window.joinCommunity = () => sendMessageToUnity('OnJoinCommunityCompleted', mockBool(false));
+    window.createPost = () => sendMessageToUnity('OnCreatePostCompleted', mockBool(false));
+    window.addToHomeScreen = () => sendMessageToUnity('OnAddToHomeScreenCompleted', mockBool(false));
+    window.addToFavorites = () => sendMessageToUnity('OnAddToFavoritesCompleted', mockBool(false));
+    window.rate = () => sendMessageToUnity('OnRateCompleted', mockBool(false));
+    window.getIsLeaderboardSupported = () => mockBool(false);
+    window.getIsLeaderboardNativePopupSupported = () => mockBool(false);
+    window.getIsLeaderboardSetScoreSupported = () => mockBool(false);
+    window.getIsLeaderboardGetScoreSupported = () => mockBool(false);
+    window.getIsLeaderboardGetEntriesSupported = () => mockBool(false);
+    window.leaderboardSetScore = () => sendMessageToUnity('OnLeaderboardSetScoreCompleted', mockBool(false));
     window.leaderboardGetScore = () => sendMessageToUnity('OnLeaderboardGetScoreCompleted', '');
     window.leaderboardGetEntries = () => sendMessageToUnity('OnLeaderboardGetEntriesCompletedSuccess', '[]');
-    window.leaderboardShowNativePopup = () => sendMessageToUnity('OnLeaderboardShowNativePopupCompleted', 'false');
-
-    // Payments
-    window.getIsPaymentsSupported = () => 'false';
-    window.getIsCatalogSupported = () => 'false';
-    window.getIsPurchaseListSupported = () => 'false';
-    window.getIsPurchaseConsumingSupported = () => 'false';
+    window.leaderboardShowNativePopup = () => sendMessageToUnity('OnLeaderboardShowNativePopupCompleted', mockBool(false));
+    window.getIsPaymentsSupported = () => mockBool(false);
+    window.getIsCatalogSupported = () => mockBool(false);
+    window.getIsPurchaseListSupported = () => mockBool(false);
+    window.getIsPurchaseConsumingSupported = () => mockBool(false);
     window.paymentsPurchase = () => sendMessageToUnity('OnPaymentsPurchaseFailed', '');
-    window.paymentsConsumePurchase = () => sendMessageToUnity('OnPaymentsConsumePurchaseCompleted', 'false');
+    window.paymentsConsumePurchase = () => sendMessageToUnity('OnPaymentsConsumePurchaseCompleted', mockBool(false));
     window.paymentsGetCatalog = () => sendMessageToUnity('OnPaymentsGetCatalogCompletedSuccess', '[]');
     window.paymentsGetPurchases = () => sendMessageToUnity('OnPaymentsGetPurchasesCompletedSuccess', '[]');
-
-    // Remote Config
-    window.getIsRemoteConfigSupported = () => 'false';
+    window.getIsRemoteConfigSupported = () => mockBool(false);
     window.remoteConfigGet = () => sendMessageToUnity('OnRemoteConfigGetFailed', '');
-
-    // Achievements
-    window.getIsAchievementsSupported = () => 'false';
-    window.getIsGetAchievementsListSupported = () => 'false';
-    window.getIsAchievementsNativePopupSupported = () => 'false';
-    window.achievementsUnlock = () => sendMessageToUnity('OnAchievementsUnlockCompleted', 'false');
-    window.achievementsShowNativePopup = () => sendMessageToUnity('OnAchievementsShowNativePopupCompleted', 'false');
+    window.getIsAchievementsSupported = () => mockBool(false);
+    window.getIsGetAchievementsListSupported = () => mockBool(false);
+    window.getIsAchievementsNativePopupSupported = () => mockBool(false);
+    window.achievementsUnlock = () => sendMessageToUnity('OnAchievementsUnlockCompleted', mockBool(false));
+    window.achievementsShowNativePopup = () => sendMessageToUnity('OnAchievementsShowNativePopupCompleted', mockBool(false));
     window.achievementsGetList = () => sendMessageToUnity('OnAchievementsGetListCompletedSuccess', '[]');
 
-    // === UNITY LOADER DOĞRUDAN BAŞLIYOR ===
-    const unityLoader = document.createElement('script');
-    unityLoader.src = 'Build/web.loader.js';
-    unityLoader.onload = () => {
-        createUnityInstance(canvas, {
+    // sound helpers (will run after Howler is ready)
+    function initMutedLoop() {
+      try {
+        const s = new Howl({ src:['silent.mp3'], loop:true, volume:0 });
+        s.play();
+        return s;
+      } catch (e) {
+        console.warn('Howler not available or failed to init:', e);
+        return null;
+      }
+    }
+    function HowlerSoundOff(){ if (window.Howler && Howler.volume) { Howler.volume(0); } }
+    function HowlerSoundOn(){ if (window.Howler && Howler.volume) { Howler.volume(1); } }
+    window.HowlerSoundOff = HowlerSoundOff;
+    window.HowlerSoundOn = HowlerSoundOn;
+    window.openUrlInNewTab = function(url){ window.open(url, '_blank'); };
+
+    // bootstrap
+    (async function start() {
+      await ensureHowler();
+      // start silent loop to unlock audio on mobile
+      initMutedLoop();
+
+      // now load Unity loader
+      try {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'Build/web.loader.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('web.loader.js failed to load'));
+          document.body.appendChild(s);
+        });
+      } catch (e) {
+        console.error(e.message);
+        alert('Oyun yüklenemedi. Lütfen sayfayı yenileyin.');
+        return;
+      }
+
+      // create Unity instance only after Howler is ready or shim installed
+      if (typeof createUnityInstance !== 'function') {
+        console.error('createUnityInstance is not available.');
+        alert('Oyun yüklenemedi. Lütfen sayfayı yenileyin.');
+        return;
+      }
+
+      try {
+        const instance = await createUnityInstance(
+          canvas,
+          {
             dataUrl: 'Build/web.data.unityweb',
             frameworkUrl: 'Build/web.framework.js.unityweb',
             codeUrl: 'Build/web.wasm.unityweb',
             streamingAssetsUrl: 'StreamingAssets',
             companyName: 'DefaultCompany',
             productName: 'Clicker',
-            productVersion: '0.1',
-        }, onUnityLoadingProgressChanged)
-        .then((instance) => {
-            window.unityInstance = instance;
-            loadingOverlay.remove();
-            canvas.focus();
-        })
-        .catch((error) => {
-            console.error("Unity yüklenemedi:", error);
-            alert("Oyun yüklenemedi. Lütfen sayfayı yenileyin.");
-        });
-    };
-    unityLoader.onerror = () => {
-        console.error("web.loader.js yüklenemedi!");
-    };
-    document.body.appendChild(unityLoader);
-
-    // === SES KONTROLÜ (Howler) ===
-    var sounds = {};
-    var sound;
-    var isSound = 1;
-
-    sound = new Howl({
-        src: ['silent.mp3'],
-        loop: true,
-        volume: 0
-    });
-    sound.play();
-
-    function HowlerSoundOff() {
-        isSound = 0;
-        Howler.volume(0);
-        console.log('Howler Sound Off!');
-    }
-
-    function HowlerSoundOn() {
-        isSound = 1;
-        Howler.volume(1);
-        console.log('Howler Sound On!');
-    }
-
-    function openUrlInNewTab(url) {
-        window.open(url, '_blank');
-    }
-</script>
+            productVersion: '0.1'
+          },
+          onUnityLoadingProgressChanged
+        );
+        window.unityInstance = instance;
+        loadingOverlay.remove();
+        canvas.focus();
+      } catch (error) {
+        console.error('Unity yüklenemedi:', error);
+        alert('Oyun yüklenemedi. Lütfen sayfayı yenileyin.');
+      }
+    })();
+  </script>
 </body>
 </html>
